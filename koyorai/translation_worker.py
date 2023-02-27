@@ -4,6 +4,7 @@ import numpy
 import soundfile as sf
 import sox
 import sqlite3
+import time
 import whisper
 
 
@@ -40,25 +41,33 @@ def main():
     # Create an SOX downsampler to convert 48KHz data to 16KHz
     tfm = sox.Transformer()
     tfm.set_output_format(channels=1, rate=16000)
+    times = []
 
     # TODO(grantmarshall) Get the most out of date session from the DB
     # oldest_session_id = get_oldest_session(db)
 
     # Get raw bytes for the audio of the session as a numpy array
-    data, sample_rate = get_bytes_for_session(db, args.session)
+    while True:
+        data, sample_rate = get_bytes_for_session(db, args.session)
 
-    # Downsample the data and feed it into the translator
-    downsampled_data = tfm.build_array(
-        input_array=data,
-        sample_rate_in=sample_rate
-    )
-    result = whisper.transcribe(
-        audio=downsampled_data.astype(numpy.float32),
-        model=model,
-        task="translate")
+        # Downsample the data and feed it into the translator
+        print('Beginning translation.')
+        begin_time = time.time()
+        downsampled_data = tfm.build_array(
+            input_array=data,
+            sample_rate_in=sample_rate
+        )
+        result = whisper.transcribe(
+            audio=downsampled_data[-30 * sample_rate:].astype(numpy.float32),
+            model=model,
+            task="translate")
+        elapsed_time = (time.time() - begin_time)
+        times.append(elapsed_time)
 
-    # TODO(grantmarshall): Insert the translation into the db
-    print(result)
+        # TODO(grantmarshall): Insert the translation into the db
+        print('Computation time: {:2f}s'.format(elapsed_time))
+        print('Running average: {:2f}s'.format(sum(times) / len(times)))
+        print('Result: {}'.format(result['text']))
 
 
 if __name__ == '__main__':
